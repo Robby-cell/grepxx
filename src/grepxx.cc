@@ -1,11 +1,10 @@
 #include "grepxx.h"
 
 #include "options.h"
-#include <algorithm>
-#include <cctype>
+
 #include <cstddef>
-#include <functional>
 #include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 
@@ -13,35 +12,44 @@ namespace grepxx {
 
 using std::operator""sv;
 
-constexpr auto AnsiBlue = "\e[0;34m"sv;
-constexpr auto AnsiGreen = "\e[0;32m"sv;
-constexpr auto AnsiReset = "\033[0m"sv;
+constexpr inline auto AnsiBlue = "\e[0;34m"sv;
+constexpr inline auto AnsiGreen = "\e[0;32m"sv;
+constexpr inline auto AnsiReset = "\033[0m"sv;
+constexpr inline auto AnsiRed = "\033[31m"sv;
 
 namespace {
 void grep(std::ostream &os, std::istream &is,
           const options::Options::Config &config,
           std::optional<std::string_view> header = std::nullopt) {
   std::size_t line_no = 1;
-  const std::boyer_moore_horspool_searcher searcher{
-      config.pattern.begin(),
-      config.pattern.end(),
-      {},
-      [case_insensitive = config.case_insensitive](const auto lhs,
-                                                   const auto rhs) {
-        if (case_insensitive) {
-          return std::tolower(lhs) == std::tolower(rhs);
-        } else {
-          return lhs == rhs;
-        }
-      }};
+
+  auto flags = std::regex_constants::ECMAScript;
+  if (config.case_insensitive) {
+    flags |= std::regex_constants::icase;
+  }
+  std::regex searcher{config.pattern, flags};
 
   if (header) {
     os << AnsiBlue << *header << AnsiReset << '\n';
   }
   for (std::string line; std::getline(is, line); line.clear(), ++line_no) {
-    const auto result = std::search(line.begin(), line.end(), searcher);
-    if (result != line.end()) {
-      os << AnsiGreen << line_no << AnsiReset << ": " << line << '\n';
+    if (std::regex_search(line, searcher)) {
+      os << AnsiGreen << line_no << AnsiReset << ": ";
+
+      /* ---- print line with matches in red ---- */
+      std::sregex_iterator it(line.begin(), line.end(), searcher);
+      std::sregex_iterator end;
+
+      std::size_t last = 0; // where the previous match ended
+      for (; it != end; ++it) {
+        const std::smatch &m = *it;
+        os.write(line.data() + last, m.position() - last); // text before match
+        os << AnsiRed << m.str() << AnsiReset;             // the match itself
+        last = m.position() + m.length();
+      }
+      os.write(line.data() + last, line.size() - last); // tail of the line
+      os << '\n';
+      /* ---------------------------------------- */
     }
   }
 }

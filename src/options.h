@@ -21,6 +21,8 @@ struct Options {
   struct Config {
     std::string pattern;
     bool case_insensitive = false;
+    bool recurse_dirs = false;
+    std::optional<std::string> literal_text;
   };
   Config config;
 
