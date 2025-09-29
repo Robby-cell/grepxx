@@ -18,7 +18,7 @@ constexpr inline auto AnsiReset = "\033[0m"sv;
 constexpr inline auto AnsiRed = "\033[31m"sv;
 
 namespace {
-void grep(std::ostream &os, std::istream &is,
+size_t grep(std::ostream &os, std::istream &is,
           const options::Options::Config &config,
           std::optional<std::string_view> header = std::nullopt) {
   std::size_t line_no = 1;
@@ -29,11 +29,17 @@ void grep(std::ostream &os, std::istream &is,
   }
   std::regex searcher{config.pattern, flags};
 
-  if (header) {
-    os << AnsiBlue << *header << AnsiReset << '\n';
-  }
+  bool printed_header = false;
+  size_t matches = 0;
+
   for (std::string line; std::getline(is, line); line.clear(), ++line_no) {
     if (std::regex_search(line, searcher)) {
+      if (!matches) {
+        if (header) {
+          os << AnsiBlue << *header << AnsiReset << '\n';
+        }
+      }
+ 
       os << AnsiGreen << line_no << AnsiReset << ": ";
 
       /* ---- print line with matches in red ---- */
@@ -50,21 +56,24 @@ void grep(std::ostream &os, std::istream &is,
       os.write(line.data() + last, line.size() - last); // tail of the line
       os << '\n';
       /* ---------------------------------------- */
+      ++matches;
     }
   }
+  return matches;
 }
 } // namespace
 
 void grep(std::ostream &os, options::Options &opts) {
   std::size_t i = 0;
+  const auto stream_count = opts.streams.size();
   for (auto &stream : opts.streams) {
     auto &is = *stream.stream;
-    grep(os, is, opts.config,
+    const auto matches = grep(os, is, opts.config,
          (stream.name.has_value()
               ? std::optional<std::string_view>(*stream.name)
               : std::nullopt));
 
-    if (++i << opts.streams.size()) {
+    if (++i < stream_count && matches) {
       os << '\n';
     }
   }
