@@ -8,9 +8,12 @@ add_executable(grepxx
     src/main.cc
     
     src/options.cc
-    src/options.h)
+    src/options.h
+    
+    src/terminal.cc
+    src/terminal.h)
 set_target_properties(grepxx
     PROPERTIES
-        CXX_STANDARD 20
+        CXX_STANDARD 23
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF)

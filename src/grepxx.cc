@@ -18,9 +18,9 @@ constexpr inline auto AnsiReset = "\033[0m"sv;
 constexpr inline auto AnsiRed = "\033[31m"sv;
 
 namespace {
-size_t grep(std::ostream &os, std::istream &is,
-          const options::Options::Config &config,
-          std::optional<std::string_view> header = std::nullopt) {
+size_t grep(Output output, std::istream &is,
+            const options::Options::Config &config,
+            std::optional<std::string_view> header = std::nullopt) {
   std::size_t line_no = 1;
 
   auto flags = std::regex_constants::ECMAScript;
@@ -31,16 +31,21 @@ size_t grep(std::ostream &os, std::istream &is,
 
   bool printed_header = false;
   size_t matches = 0;
+  const auto terminal = output.is_printing_to_terminal();
 
   for (std::string line; std::getline(is, line); line.clear(), ++line_no) {
     if (std::regex_search(line, searcher)) {
       if (!matches) {
         if (header) {
-          os << AnsiBlue << *header << AnsiReset << '\n';
+          if (terminal) {
+            output.print_dbg("{}{}{}\n", AnsiBlue, *header, AnsiReset);
+          }
         }
       }
- 
-      os << AnsiGreen << line_no << AnsiReset << ": ";
+
+      if (terminal) {
+        output.print_dbg("{}{}{}: ", AnsiGreen, line_no, AnsiReset);
+      }
 
       /* ---- print line with matches in red ---- */
       std::sregex_iterator it(line.begin(), line.end(), searcher);
@@ -49,12 +54,20 @@ size_t grep(std::ostream &os, std::istream &is,
       std::size_t last = 0; // where the previous match ended
       for (; it != end; ++it) {
         const std::smatch &m = *it;
-        os.write(line.data() + last, m.position() - last); // text before match
-        os << AnsiRed << m.str() << AnsiReset;             // the match itself
+        // text before match
+        output.print_match("{}", std::string_view{line.data() + last,
+                                                  line.data() + m.position()});
+
+        // the match itself
+        static constexpr std::string_view Nothing;
+        output.print_match("{}{}{}", terminal ? AnsiRed : Nothing, m.str(),
+                           terminal ? AnsiReset : Nothing);
         last = m.position() + m.length();
       }
-      os.write(line.data() + last, line.size() - last); // tail of the line
-      os << '\n';
+      // tail of the line
+      output.print_match(
+          "{}\n", std::string_view{line.data() + last, line.size() - last});
+
       /* ---------------------------------------- */
       ++matches;
     }
@@ -63,18 +76,18 @@ size_t grep(std::ostream &os, std::istream &is,
 }
 } // namespace
 
-void grep(std::ostream &os, options::Options &opts) {
+void grep(Output output, options::Options &opts) {
   std::size_t i = 0;
   const auto stream_count = opts.streams.size();
   for (auto &stream : opts.streams) {
     auto &is = *stream.stream;
-    const auto matches = grep(os, is, opts.config,
-         (stream.name.has_value()
-              ? std::optional<std::string_view>(*stream.name)
-              : std::nullopt));
+    const auto matches = grep(
+        output, is, opts.config,
+        (stream.name.has_value() ? std::optional<std::string_view>(*stream.name)
+                                 : std::nullopt));
 
     if (++i < stream_count && matches) {
-      os << '\n';
+      output.print_match("\n");
     }
   }
 }
